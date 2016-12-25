@@ -1,0 +1,97 @@
+set git_branch=br_android_ncihalx_n_osp_ext_PN553
+set git_user="nxp66309"
+set WORKSPACE="C:\Android_tm"
+
+cd %WORKSPACE%
+
+
+mkdir QualityMetrics 
+cd QualityMetrics
+
+xcopy /Y  %WORKSPACE%\cloc.pl .
+xcopy /Y  %WORKSPACE%\files.txt .
+xcopy /Y  %WORKSPACE%\Jenkins_CCN_Summary_new.py .
+xcopy /Y  %WORKSPACE%\Jenkins_LOC_Summary.py .
+xcopy /Y  "C:\CM activities\Script\Jenkins-Coverity_Summary.pl" .
+xcopy /Y  %WORKSPACE%\Coverity-OSP-build.log .
+xcopy /Y %WORKSPACE%\C_CPP-Summary-coverity.txt .
+xcopy /Y %WORKSPACE%\Java-Summary-coverity.txt .
+
+rm -rf  mw_src 
+mkdir mw_src
+cd mw_src
+git clone ssh://%git_user%@www.collabnet.nxp.com:29418/nxp_nci_hal_base
+git clone ssh://%git_user%@www.collabnet.nxp.com:29418/nxp_nci_hal_libnfc-nci
+git clone ssh://%git_user%@www.collabnet.nxp.com:29418/nxp_nci_hal_nfc
+
+cd nxp_nci_hal_base
+git reset HEAD --hard 
+git checkout %git_branch%
+git pull
+cd ..
+
+cd nxp_nci_hal_libnfc-nci
+git reset HEAD --hard 
+git checkout  %git_branch%
+git pull
+cd ..
+
+cd nxp_nci_hal_nfc
+git reset HEAD --hard 
+git checkout  %git_branch%
+git pull
+
+cd ../../
+
+
+perl cloc.pl %WORKSPACE%\QualityMetrics\mw_src --by-file --exclude-list-file=files.txt --report-file=clocReport-%git_branch%.xml --xml
+
+python Jenkins_LOC_Summary.py clocReport-%git_branch%.xml
+
+::mkdir ccn_selected_files
+
+::xcopy /Y  %WORKSPACE%\QualityMetrics\mw_src\nxp_nci_hal_nfc\nci\jni .
+::xcopy /Y  %WORKSPACE%\QualityMetrics\mw_src\nxp_nci_hal_nfc\nxp\jni .
+::xcopy /Y mw_src\nxp_nci_hal_libnfc-nci\halimpl\pn54x ccn_selected_files /S/Y
+
+cp %WORKSPACE%\hfcca25.py .
+cp %WORKSPACE%\hfcca15.py .
+
+
+python hfcca25.py mw_src\nxp_nci_hal_libnfc-nci\halimpl > ccnReport25.txt
+python hfcca15.py mw_src\nxp_nci_hal_libnfc-nci\halimpl > ccnReport15.txt
+
+
+mkdir checkselected
+cd checkselected
+xcopy /YS "%WORKSPACE%\checkstyle-5.6" .
+rm -rf Sources
+mkdir Sources
+
+xcopy /Y "%WORKSPACE%\QualityMetrics\mw_src\nxp_nci_hal_base\core\java\android\nfc\cardemulation\ApduServiceInfo.aidl" Sources
+xcopy /Y "%WORKSPACE%\QualityMetrics\mw_src\nxp_nci_hal_base\core\java\android\nfc\cardemulation\ApduServiceInfo.java" Sources
+xcopy /Y  "%WORKSPACE%\QualityMetrics\mw_src\nxp_nci_hal_base\core\java\com\nxp\nfc" Sources
+xcopy /Y  "%WORKSPACE%\QualityMetrics\mw_src\nxp_nci_hal_nfc\nci\src" Sources
+xcopy /Y  "%WORKSPACE%\QualityMetrics\mw_src\nxp_nci_hal_nfc\src\com\android\nfc" Sources
+
+java -cp checkstyle-5.6-all.jar com.puppycrawl.tools.checkstyle.Main -c checkstyle_config_NFC_NCIHAL2_AR2.4.0_RC2_KK_OSP_EXT.xml -f xml -o checkstylereport-%git_branch%.xml -r Sources
+
+cd ..
+
+echo "Test complete"
+echo "Now trying to extract CCN results..."
+python Jenkins_CCN_Summary_new.py ccnReport15.txt
+python Jenkins_CCN_Summary_new.py ccnReport25.txt
+
+echo "CCN results were successfully extracted"
+echo "Now trying extract LOC results"
+python Jenkins_LOC_Summary.py clocReport-%git_branch%.xml
+echo "LOC results were successfully extracted"
+
+echo "Now Summarizing Coverity reports for OSP"
+perl Jenkins-Coverity_Summary.pl C_CPP-Summary-coverity.txt
+perl Jenkins-Coverity_Summary.pl Java-Summary-coverity.txt
+
+
+
+
